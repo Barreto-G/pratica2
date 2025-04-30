@@ -45,9 +45,14 @@ public class ServerApplication {
         String pbLocalKeyBase64 = Base64.getEncoder().encodeToString(pbLocalKey);
         out.println(pbLocalKeyBase64);
 
+        System.out.println("Chave enviada com sucesso");
+
         // IV - Recebe chave publica do cliente e constroi a chave derivada
         String pbClientPubKeyBase64 = in.readLine();
         byte[] pbClientPubKey = Base64.getDecoder().decode(pbClientPubKeyBase64);
+
+        System.out.println("Chave recebida com sucesso");
+
         // Conteudo acordado entre ambas as partes
         byte[] pbKDFData = "O QUE FAZEMOS EM VIDA ECOA PELA ETERNIDADE".getBytes(StandardCharsets.UTF_8);
 
@@ -78,6 +83,8 @@ public class ServerApplication {
 
         out.println(encryptedMessageBase64);
 
+        System.out.println("Mensagem de texto enviada com sucesso");
+
         // VII - Espera o retorno do cliente
         String messageBase64 = in.readLine();
         String signatureBase64 = in.readLine();
@@ -92,14 +99,14 @@ public class ServerApplication {
         byte[] pubSignKey_decrypted = api.decrypt(sessionKey, pubSignKey_encrypted);
 
         // VIII - Verifica se a assinatura digital e valida
-        String clientPublicKey = "client_pubkey_tmp";
+        String clientPublicKey = "client_pubkey_gb";
         api.deleteKeyIfExists(clientPublicKey);
         System.out.println("Até aqui de boa");
         
         try {
             api.importKey(clientPublicKey, 
-                    TacNDJavaLib.PUBLICKEY_BLOB, 
-                    TacNDJavaLib.ALG_ECC_SECP256R1,
+                    TacNDJavaLib.PUBLICKEY_BLOB_HSM, 
+                    TacNDJavaLib.ALG_OBJ_PUBKEY_ECC_BLOB,
                     TacNDJavaLib.EXPORTABLE_KEY,  
                     pubSignKey_decrypted,
                     pubSignKeyBase64.length()
