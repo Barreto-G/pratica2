@@ -4,7 +4,7 @@ import com.dinamonetworks.Dinamo;
 import br.com.trueaccess.TacException;
 import br.com.trueaccess.TacNDJavaLib;
 
-public class ClientCryptoService {
+public class ClientCryptoService implements AutoCloseable{
     private Dinamo api;
 
     public ClientCryptoService(String ip, String usr, String pwd) throws TacException{
@@ -97,5 +97,12 @@ public class ClientCryptoService {
     public static byte[] GetPublicKey(Dinamo api, String id) throws TacException{
         byte[] publicKey = api.exportKey(id, TacNDJavaLib.PUBLICKEY_BLOB);
         return publicKey;
+    }
+
+    @Override
+    public void close() throws Exception{
+        System.out.println("Encerrando conexao com o servidor HSM");
+        this.api.closeSession();
+        System.out.println("Comunicacao encerrada com sucesso");
     }
 }

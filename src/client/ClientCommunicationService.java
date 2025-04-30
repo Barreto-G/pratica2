@@ -23,6 +23,7 @@ public class ClientCommunicationService implements AutoCloseable{
 
     @Override
     public void close() throws Exception {
+        System.out.println("Encerrando conexao com o servidor");
         this.out.close();
         this.in.close();
         this.socket.close();

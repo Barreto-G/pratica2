@@ -1,7 +1,6 @@
 package client;
 
 import java.nio.charset.StandardCharsets;
-import com.dinamonetworks.Dinamo;
 import br.com.trueaccess.TacNDJavaLib;
 
 public class ClientApplication {
@@ -21,78 +20,47 @@ public class ClientApplication {
         client.ClientCommunicationService comm = new ClientCommunicationService(serverAddress, port);
 
         // II - Conexao com a API da Dinamo
-
-        Dinamo api = new Dinamo();
-        api.openSession(hsmIp, hsmUser, hsmUserPassword);
-        System.out.println("API dinamo se conectou com sucesso!");
+        client.ClientCryptoService hsm = new ClientCryptoService(hsmIp, hsmUser, hsmUserPassword);
 
         // III - Gerar chave assimetrica e enviar a parte publica para o servidor
-        
-        api.deleteKeyIfExists(AssymKeyId);
-
-        client.ClientCryptoService.CreateKey(api,AssymKeyId, TacNDJavaLib.ALG_ECC_BRAINPOOL_P512T1);
-        byte[] pbLocalKey = client.ClientCryptoService.GetPublicKey(api, AssymKeyId); 
+        hsm.CreateKey(AssymKeyId, TacNDJavaLib.ALG_ECC_BRAINPOOL_P512T1);
+        byte[] pbLocalKey = hsm.exportKey(AssymKeyId, TacNDJavaLib.PUBLICKEY_BLOB);
         comm.sendMessage(pbLocalKey);
 
-        // IV - Recebe a chave publica do servidor e gera a chave derivada
+        // IV - Recebe a chave publica do servidor, gera a chave derivada e a de sessao
         byte[] pbServerPubKey = comm.readMessage();
+        byte[] pbKDFData = "O QUE FAZEMOS EM VIDA ECOA PELA ETERNIDADE".getBytes(StandardCharsets.UTF_8); // Conteudo acordado entre ambas as partes
+        hsm.genECDHKey(sessionKey, AssymKeyId, pbServerPubKey, pbKDFData);                     
 
-        // Conteudo acordado entre ambas as partes
-        byte[] pbKDFData = "O QUE FAZEMOS EM VIDA ECOA PELA ETERNIDADE".getBytes(StandardCharsets.UTF_8);
-
-        byte[] pbKey = api.genEcdhKeyX963Sha256(AssymKeyId, //chave local
-                                                    null,        // Nome da chave derivada, caso fosse salvar
-                                                    TacNDJavaLib.ALG_AES_256, //tipo da chave (eu acho)
-                                                    false,
-                                                    false,
-                                                    pbServerPubKey,   // Chave publica do outro
-                                                    pbKDFData);     // Informacao compartilhada para gerar a chave   
-
-
-        // V - Gera a chave de sessao a partir da chave derivada                                           
-        
-        api.deleteKeyIfExists(sessionKey);
-
-        api.importKey(sessionKey, // nome da chave
-                    TacNDJavaLib.PLAINTEXTKEY_BLOB,
-                    TacNDJavaLib.ALG_AES_256,
-                    TacNDJavaLib.EXPORTABLE_KEY,
-                    pbKey, // a partir da chave derivada que achamos
-                    TacNDJavaLib.ALG_AES_256_LEN);
-        
-        System.out.println("Chave de sessao gerada com sucesso");
-        
-        // VI - Recebe uma mensagem cifrada do servidor e a decifra
+        // V - Recebe uma mensagem cifrada do servidor e a decifra
         byte[] encryptedMessage = comm.readMessage();
-        byte[] decryptedMessage = api.decrypt(sessionKey, encryptedMessage);
-        String serverMessage = new String(decryptedMessage, StandardCharsets.UTF_8); 
-
+        byte[] decryptedMessage = hsm.decryptMessage(sessionKey, encryptedMessage);
+        String serverMessage = new String(decryptedMessage, StandardCharsets.UTF_8); // remontando a mensagem (bytes -> string)
         System.out.println("Mensagem recebida: " + serverMessage);
 
-        // VII - Gera par de chaves de assinatura digital
-        
-        api.deleteKeyIfExists(clientSignatureKey);
-        api.createKey(clientSignatureKey, TacNDJavaLib.ALG_ECC_SECP256R1);
+        // VI - Gera par de chaves de assinatura digital
+        hsm.CreateKey(clientSignatureKey, TacNDJavaLib.ALG_ECC_SECP256R1);
+        byte[] public_clientSignatureKey= hsm.exportKey(clientSignatureKey, TacNDJavaLib.PUBLICKEY_BLOB); // Parte publica da chave
 
-        byte[] public_clientSignatureKey = api.exportKey(clientSignatureKey, TacNDJavaLib.PUBLICKEY_BLOB);
+        // VII - Assina digitalmente a mensagem, encripta tudo e envia ao servidor
+        byte[] signature = hsm.signMessage(clientSignatureKey, TacNDJavaLib.ALG_SHA2_256, decryptedMessage);
 
-        // VIII - Assina digitalmente a mensagem envia novamente ao servidor
-        byte[] signature = api.signHash(clientSignatureKey, TacNDJavaLib.ALG_SHA2_256, decryptedMessage);
-
-        byte[] encryptedMessage2 = api.encrypt(sessionKey, decryptedMessage);
-        byte[] encryptedSignature = api.encrypt(sessionKey, signature);
-        byte[] encryptedPubSignKey = api.encrypt(sessionKey, public_clientSignatureKey);
+        byte[] encryptedMessage2 = hsm.encryptMessage(sessionKey, decryptedMessage);
+        byte[] encryptedSignature = hsm.encryptMessage(sessionKey, signature);
+        byte[] encryptedPubSignKey = hsm.encryptMessage(sessionKey, public_clientSignatureKey);
 
         comm.sendMessage(encryptedMessage2);
         comm.sendMessage(encryptedSignature);
         comm.sendMessage(encryptedPubSignKey);
+
+        // --- Encerramento do processo cliente ---
         
         System.out.println("Excluindo chaves de sessao");
-        api.deleteKey(AssymKeyId);
-        api.deleteKey(sessionKey);
-        api.deleteKey(clientSignatureKey);
-
-        System.out.println("Encerrando conexao com servidor");
-        comm.close();
+        hsm.deleteKey(AssymKeyId);
+        hsm.deleteKey(sessionKey);
+        hsm.deleteKey(clientSignatureKey);
+        
+        hsm.close();  // Fecha a conexao com o servidor HSM
+        comm.close(); // Fecha a conexao com o servidor
     }
 }
