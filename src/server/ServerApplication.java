@@ -15,9 +15,18 @@ import br.com.trueaccess.TacException;
 import br.com.trueaccess.TacNDJavaLib;
 
 public class ServerApplication {
-     public static void main(String[] args) throws IOException, TacException {
+    static int port = 54000; // Porta onde o servidor vai ouvir
+    static String hsmIp = "187.33.9.132";
+    static String hsmUser = "utfpr1";
+    static String hsmUserPassword = "segcomp20241";
+
+    static String AssymKeyId = "asymServerKey_gb";
+    static String sessionKey = "serverSessionKey_gb";
+    static String clientPublicKey = "client_pubkey_gb";
+
+    public static void main(String[] args) throws IOException, TacException {
         // I - Lancamento do servidor e conexao com o cliente
-        int port = 54000; // Porta onde o servidor vai ouvir
+        
         ServerSocket serverSocket = new ServerSocket(port);
         System.out.println("Servidor ouvindo na porta " + port);
 
@@ -28,16 +37,12 @@ public class ServerApplication {
         BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 
         // II - Conecta com o Dinamo
-        String hsmIp = "187.33.9.132";
-        String hsmUser = "utfpr1";
-        String hsmUserPassword = "segcomp20241";
-
         Dinamo api = new Dinamo();
         api.openSession(hsmIp, hsmUser, hsmUserPassword);
         System.out.println("API dinamo se conectou com sucesso!");
 
         // III - Gera conjunto de chaves assimetricas e envia a chave publica para o cliente
-        String AssymKeyId = "asymServerKey_gb";
+        
         api.deleteKeyIfExists(AssymKeyId);
 
         api.createKey(AssymKeyId, TacNDJavaLib.ALG_ECC_BRAINPOOL_P512T1);
@@ -65,7 +70,7 @@ public class ServerApplication {
                                                     pbKDFData);     // Informacao compartilhada para gerar a chave
 
         // V - Gera chave de sessao a partir da chave derivada
-        String sessionKey = "serverSessionKey_gb";
+        
         api.deleteKeyIfExists(sessionKey);
 
         api.importKey(sessionKey,
@@ -99,7 +104,7 @@ public class ServerApplication {
         byte[] pubSignKey_decrypted = api.decrypt(sessionKey, pubSignKey_encrypted);
 
         // VIII - Verifica se a assinatura digital e valida
-        String clientPublicKey = "client_pubkey_gb";
+        
         api.deleteKeyIfExists(clientPublicKey);
         System.out.println("Até aqui de boa");
         
