@@ -1,16 +1,7 @@
 package server;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-
-import com.dinamonetworks.Dinamo;
-
 import br.com.trueaccess.TacException;
 import br.com.trueaccess.TacNDJavaLib;
 
@@ -19,119 +10,76 @@ public class ServerApplication {
     static String hsmIp = "187.33.9.132";
     static String hsmUser = "utfpr1";
     static String hsmUserPassword = "segcomp20241";
+    static String agreedString = "O QUE FAZEMOS EM VIDA ECOA PELA ETERNIDADE";
 
     static String AssymKeyId = "asymServerKey_gb";
     static String sessionKey = "serverSessionKey_gb";
     static String clientPublicKey = "client_pubkey_gb";
+    static String clientSignatureKey = "clientSignKey_gb";
 
     public static void main(String[] args) throws IOException, TacException {
         // I - Lancamento do servidor e conexao com o cliente
-        
-        ServerSocket serverSocket = new ServerSocket(port);
-        System.out.println("Servidor ouvindo na porta " + port);
-
-        Socket clientSocket = serverSocket.accept(); // Espera a conexão do cliente
-        System.out.println("Cliente conectado!");
-
-        PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
-        BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+        server.ServerCommunicationService comm = new ServerCommunicationService(port);
+        while(!comm.listen()){}
 
         // II - Conecta com o Dinamo
-        Dinamo api = new Dinamo();
-        api.openSession(hsmIp, hsmUser, hsmUserPassword);
-        System.out.println("API dinamo se conectou com sucesso!");
+        server.ServerCryptoService hsm = new ServerCryptoService(hsmIp, hsmUser, hsmUserPassword);
 
         // III - Gera conjunto de chaves assimetricas e envia a chave publica para o cliente
         
-        api.deleteKeyIfExists(AssymKeyId);
+        hsm.CreateKey(AssymKeyId, TacNDJavaLib.ALG_ECC_BRAINPOOL_P512T1);
+        byte[] pbLocalKey = hsm.exportKey(AssymKeyId, TacNDJavaLib.PUBLICKEY_BLOB);
+        comm.sendMessage(pbLocalKey);
 
-        api.createKey(AssymKeyId, TacNDJavaLib.ALG_ECC_BRAINPOOL_P512T1);
-        byte[] pbLocalKey = api.exportKey(AssymKeyId, TacNDJavaLib.PUBLICKEY_BLOB);
-        String pbLocalKeyBase64 = Base64.getEncoder().encodeToString(pbLocalKey);
-        out.println(pbLocalKeyBase64);
+        // IV - Recebe chave publica do cliente e constroi a chave de sessao
+        byte[] pbClientPubKey = comm.readMessage();
+        byte[] pbKDFData = agreedString.getBytes(StandardCharsets.UTF_8); // Conteudo acordado entre ambas as partes
+        hsm.genECDHKey(sessionKey, AssymKeyId, pbClientPubKey, pbKDFData); 
 
-        System.out.println("Chave enviada com sucesso");
+        // V - Cifra uma mensagem e envia para o cliente
+        byte[] bMessage = "O RATO ROEU A ROUPA DO REI DE ROMA".getBytes(StandardCharsets.UTF_8);
+        byte[] encryptedMessage = hsm.encryptMessage(sessionKey, bMessage);
+        comm.sendMessage(encryptedMessage);
 
-        // IV - Recebe chave publica do cliente e constroi a chave derivada
-        String pbClientPubKeyBase64 = in.readLine();
-        byte[] pbClientPubKey = Base64.getDecoder().decode(pbClientPubKeyBase64);
+        // VI - Espera o retorno do cliente
+        byte[] message = comm.readMessage();
+        message = hsm.decryptMessage(sessionKey, message);
 
-        System.out.println("Chave recebida com sucesso");
+        byte[] signature = comm.readMessage();
+        signature = hsm.decryptMessage(sessionKey, signature);
 
-        // Conteudo acordado entre ambas as partes
-        byte[] pbKDFData = "O QUE FAZEMOS EM VIDA ECOA PELA ETERNIDADE".getBytes(StandardCharsets.UTF_8);
+        byte[] pubSignKey = comm.readMessage();
+        pubSignKey = hsm.decryptMessage(sessionKey, pubSignKey);
 
-        byte[] pbKey = api.genEcdhKeyX963Sha256(AssymKeyId, //chave local
-                                                    null,        // Nome da chave derivada, caso fosse salvar
-                                                    TacNDJavaLib.ALG_AES_256, //tipo da chave (eu acho)
-                                                    false,
-                                                    false,
-                                                    pbClientPubKey,   // Chave publica do outro
-                                                    pbKDFData);     // Informacao compartilhada para gerar a chave
-
-        // V - Gera chave de sessao a partir da chave derivada
-        
-        api.deleteKeyIfExists(sessionKey);
-
-        api.importKey(sessionKey,
-                    TacNDJavaLib.PLAINTEXTKEY_BLOB,
-                    TacNDJavaLib.ALG_AES_256,
-                    TacNDJavaLib.EXPORTABLE_KEY,
-                    pbKey,
-                    TacNDJavaLib.ALG_AES_256_LEN);
-        
-        // VI - Cifra uma mensagem e envia para o cliente
-        String message = "O RATO ROEU A ROUPA DO REI DE ROMA";
-        byte[] bMessage = message.getBytes(StandardCharsets.UTF_8);
-        byte[] encryptedMessage = api.encrypt(sessionKey, bMessage);
-        String encryptedMessageBase64 = Base64.getEncoder().encodeToString(encryptedMessage);
-
-        out.println(encryptedMessageBase64);
-
-        System.out.println("Mensagem de texto enviada com sucesso");
-
-        // VII - Espera o retorno do cliente
-        String messageBase64 = in.readLine();
-        String signatureBase64 = in.readLine();
-        String pubSignKeyBase64 = in.readLine();
-
-        byte[] message_encrypted = Base64.getDecoder().decode(messageBase64);
-        byte[] signature_encrypted = Base64.getDecoder().decode(signatureBase64);
-        byte[] pubSignKey_encrypted = Base64.getDecoder().decode(pubSignKeyBase64);
-
-        byte[] message_decrypted = api.decrypt(sessionKey, message_encrypted);
-        byte[] signature_decrypted = api.decrypt(sessionKey, signature_encrypted);
-        byte[] pubSignKey_decrypted = api.decrypt(sessionKey, pubSignKey_encrypted);
-
-        // VIII - Verifica se a assinatura digital e valida
-        
-        api.deleteKeyIfExists(clientPublicKey);
-        System.out.println("Até aqui de boa");
-        
-        try {
-            api.importKey(clientPublicKey, 
+        // VII - Verifica se a assinatura digital e valida
+        hsm.importKey(clientSignatureKey, 
                     TacNDJavaLib.PUBLICKEY_BLOB_HSM, 
-                    TacNDJavaLib.ALG_OBJ_PUBKEY_ECC_BLOB,
-                    TacNDJavaLib.EXPORTABLE_KEY,  
-                    pubSignKey_decrypted,
-                    pubSignKeyBase64.length()
-            );
-            
+                    TacNDJavaLib.EXPORTABLE_KEY, 
+                    TacNDJavaLib.ALG_OBJ_PUBKEY_ECC_BLOB, 
+                    pubSignKey, 
+                    pubSignKey.length);
 
-            api.verifySignature(clientPublicKey, TacNDJavaLib.ALG_SHA2_256, signature_decrypted, message_decrypted);
-            System.out.println("Assinatura válida!");
-        } catch (TacException e) {
-            System.out.println("Assinatura invalida ou erro de importacao da chave");
-            System.out.println(e.getMessage());
-        }
+        hsm.verifySignature(clientSignatureKey, 
+                            TacNDJavaLib.ALG_SHA2_256, 
+                            signature, 
+                            message);
 
+        // VIII - Excluindo chaves criadas e encerrando processos
         System.out.println("Excluindo chaves de sessao");
-        api.deleteKey(AssymKeyId);
-        api.deleteKey(sessionKey);
-        api.deleteKeyIfExists(clientPublicKey);
+        hsm.deleteKey(AssymKeyId);
+        hsm.deleteKey(sessionKey);
+        hsm.deleteKey(clientPublicKey);
+        hsm.deleteKey(clientSignatureKey);
+
         
         System.out.println("Encerrando conexao com cliente e fechando servidor");
-        clientSocket.close(); // Fecha a conexão com o cliente (ou mantenha aberto se quiser)
-        serverSocket.close();
+        try {
+            hsm.close();
+            comm.close();
+            System.out.println("Processo servidor encerrado com sucesso!");
+        } catch (Exception e) {
+            System.out.println("Houve um problema ao encerrar as conexões do servidor");
+            System.out.println(e.getMessage());
+        }
     }
 }
