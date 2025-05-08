@@ -1,8 +1,0 @@
-client\ClientCommunicationService.class
-client\ClientCryptoService.class
-server\ServerApplication.class
-client\ClientApplication.class
-common\JsonReader$1.class
-common\JsonReader.class
-server\ServerCryptoService.class
-server\ServerCommunicationService.class
