@@ -1,21 +1,30 @@
 package client;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
+
 import br.com.trueaccess.TacNDJavaLib;
+import common.JsonReader;
 
 public class ClientApplication {
-    static String serverAddress = "localhost";
-    static int port = 54000;
-
-    static String hsmIp = "187.33.9.132";
-    static String hsmUser = "utfpr1";
-    static String hsmUserPassword = "segcomp20241";
-
-    static String AssymKeyId = "asymClientKey_gb";
-    static String sessionKey = "clientSessionKey_gb";
-    static String clientSignatureKey = "clientSignKey_gb";
+    
 
     public static void main(String[] args) throws Exception{
+        // O - Lendo informacoes do Json
+        Map<String, String> info = JsonReader.ReadJson("data/clientData.json");
+
+        String serverAddress = info.get("serverAddress");
+        int port = Integer.parseInt(info.get("port"));
+
+        String hsmIp = info.get("hsmIp");
+        String hsmUser = info.get("hsmUser");
+        String hsmUserPassword = info.get("hsmUserPassword");
+
+        String agreedString = info.get("agreedString");
+        String AssymKeyId = info.get("AssymKeyId");
+        String sessionKey = info.get("sessionKey");
+        String clientSignatureKey = info.get("clientSignatureKey");
+            
         // I - Conexao com o servidor
         client.ClientCommunicationService comm = new ClientCommunicationService(serverAddress, port);
 
@@ -29,7 +38,7 @@ public class ClientApplication {
 
         // IV - Recebe a chave publica do servidor, gera a chave derivada e a de sessao
         byte[] pbServerPubKey = comm.readMessage();
-        byte[] pbKDFData = "O QUE FAZEMOS EM VIDA ECOA PELA ETERNIDADE".getBytes(StandardCharsets.UTF_8); // Conteudo acordado entre ambas as partes
+        byte[] pbKDFData = agreedString.getBytes(StandardCharsets.UTF_8); // Conteudo acordado entre ambas as partes
         hsm.genECDHKey(sessionKey, AssymKeyId, pbServerPubKey, pbKDFData);                     
 
         // V - Recebe uma mensagem cifrada do servidor e a decifra

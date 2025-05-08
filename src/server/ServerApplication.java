@@ -2,28 +2,36 @@ package server;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
+
 import br.com.trueaccess.TacException;
 import br.com.trueaccess.TacNDJavaLib;
 
+import common.JsonReader;
+
 public class ServerApplication {
-    static int port = 54000; // Porta onde o servidor vai ouvir
-    static String hsmIp = "187.33.9.132";
-    static String hsmUser = "utfpr1";
-    static String hsmUserPassword = "segcomp20241";
-    static String agreedString = "O QUE FAZEMOS EM VIDA ECOA PELA ETERNIDADE";
-
-    static String AssymKeyId = "asymServerKey_gb";
-    static String sessionKey = "serverSessionKey_gb";
-    static String clientPublicKey = "client_pubkey_gb";
-    static String clientSignatureKey = "clientSignKey_gb";
-
     public static void main(String[] args) throws IOException, TacException {
+        // O - Lendo informacoes do Json
+        Map<String, String> info = JsonReader.ReadJson("data/serverData.json");
+        
+        int port = Integer.parseInt(info.get("port"));
+        String hsmIp = info.get("hsmIp");
+        String hsmUser = info.get("hsmUser");
+        String hsmUserPassword = info.get("hsmUserPassword");
+        String agreedString = info.get("agreedString");
+        String AssymKeyId = info.get("AssymKeyId");
+        String sessionKey = info.get("sessionKey");
+        String clientPublicKey = info.get("clientPublicKey");
+        String clientSignatureKey = info.get("clientSignatureKey");
+
         // I - Lancamento do servidor e conexao com o cliente
         server.ServerCommunicationService comm = new ServerCommunicationService(port);
         while(!comm.listen()){}
 
         // II - Conecta com o Dinamo
-        server.ServerCryptoService hsm = new ServerCryptoService(hsmIp, hsmUser, hsmUserPassword);
+        server.ServerCryptoService hsm = new ServerCryptoService(hsmIp,
+                                                                hsmUser, 
+                                                                hsmUserPassword);
 
         // III - Gera conjunto de chaves assimetricas e envia a chave publica para o cliente
         

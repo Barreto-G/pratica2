@@ -1,0 +1,11 @@
+{
+    "port" : "54000",
+    "hsmIp" : "187.33.9.132",
+    "hsmUser" : "utfpr1",
+    "hsmUserPassword" : "segcomp20241",
+    "agreedString" : "O QUE FAZEMOS EM VIDA ECOA PELA ETERNIDADE",
+    "AssymKeyId" : "asymServerKey_gb",
+    "sessionKey" : "serverSessionKey_gb",
+    "clientPublicKey" : "client_pubkey_gb",
+    "clientSignatureKey" : "clientSignKey_gb"
+}
